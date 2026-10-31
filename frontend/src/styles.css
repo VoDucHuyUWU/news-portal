@@ -671,3 +671,11 @@ a:focus-visible, button:focus-visible { outline-color: var(--gold); }
 .ranking-big li:first-child .rank { grid-column: 1; grid-row: 2; }
 .ranking-big li:first-child .ranking-art ~ div { grid-column: 2; grid-row: 2; }
 .ranking-big li:first-child .ranking-title { font-size: 1.4rem; }
+
+/* Readability: Bodoni only for large headlines; running text and small titles use the reading serif */
+.about-mission { font-family: var(--serif); font-weight: 400; font-size: clamp(1.2rem, 1.8vw, 1.45rem); line-height: 1.6; max-width: 60ch; }
+.masthead-tagline, .kicker, .feature-label, .month-title, .contents-section h3, .trending h2, .footer-head { font-family: var(--serif); font-weight: 500; }
+.strip-item h3, .ranking-title, .card-title, .writer-name, .cover-section-name, .section-entry-name, .principle h3,
+.author-name, .project-note h3 { font-family: var(--serif); font-weight: 600; letter-spacing: 0; }
+.feature-title, .row-text h3 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.005em; }
+.prose h2, .comments h2 { font-family: var(--serif); font-weight: 600; }
