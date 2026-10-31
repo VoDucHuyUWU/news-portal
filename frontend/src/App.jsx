@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './auth.jsx'
 import { api } from './api.js'
 import { Avatar, Loading, useAsync } from './ui.jsx'
-import Home from './pages/Home.jsx'
+import FrontPage from './pages/FrontPage.jsx'
+import Latest from './pages/Latest.jsx'
+import Attention from './pages/Attention.jsx'
+import About from './pages/About.jsx'
 import Article from './pages/Article.jsx'
 import Search from './pages/Search.jsx'
 import { Login, Register } from './pages/AuthPages.jsx'
@@ -11,49 +14,106 @@ import Profile from './pages/Profile.jsx'
 import UserPage from './pages/UserPage.jsx'
 import AdminApp from './pages/admin/AdminApp.jsx'
 
+const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
+function SectionsMenu({ onClose }) {
+  const cats = useAsync(() => api('/api/categories'), [])
+  const ref = useRef(null)
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose()
+    const onClick = (e) => ref.current && !ref.current.contains(e.target) && !e.target.closest('.sections-toggle') && onClose()
+    window.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onClick)
+    return () => { window.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onClick) }
+  }, [onClose])
+  return (
+    <div className="sections-panel" ref={ref} role="dialog" aria-label="Sections">
+      <div className="container sections-grid">
+        {(cats.data || []).map((c) => (
+          <Link key={c.id} to={`/category/${c.slug}`} className="section-entry" onClick={onClose}>
+            <span className="section-entry-name">{c.name}</span>
+            <span className="section-entry-desc">{c.description}</span>
+            <span className="section-entry-count">{c.document_count} stories</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Header() {
   const { user, site, logout, isStaff } = useAuth()
+  const [sectionsOpen, setSectionsOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [compact, setCompact] = useState(false)
   const [q, setQ] = useState('')
-  const [open, setOpen] = useState(false)
+  const mastRef = useRef(null)
   const navigate = useNavigate()
-  const cats = useAsync(() => api('/api/categories'), [])
+  const location = useLocation()
+  useEffect(() => { setSectionsOpen(false); setSearchOpen(false) }, [location.pathname])
+  useEffect(() => {
+    const el = mastRef.current
+    if (!el || !('IntersectionObserver' in window)) return
+    const obs = new IntersectionObserver(([e]) => setCompact(!e.isIntersecting))
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
   const submit = (e) => {
     e.preventDefault()
-    navigate(`/search?q=${encodeURIComponent(q.trim())}`)
-    setOpen(false)
+    if (q.trim()) navigate(`/search?q=${encodeURIComponent(q.trim())}`)
   }
+  const sectionActive = location.pathname.startsWith('/category') || location.pathname.startsWith('/tag')
   return (
     <header className="site-header">
-      <div className="header-row container">
-        <Link to="/" className="wordmark" aria-label={`${site.site_name} home`}>
-          <span className="wordmark-bar" aria-hidden="true" />{site.site_name}
-        </Link>
-        <form className="header-search" onSubmit={submit} role="search">
-          <input type="search" placeholder="Search articles" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search articles" />
-        </form>
-        <button className="menu-toggle" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Menu">Menu</button>
-        <div className={`header-account ${open ? 'is-open' : ''}`}>
-          {user ? (
-            <>
-              {isStaff && <Link className="btn btn-small btn-ghost" to="/admin" onClick={() => setOpen(false)}>Admin</Link>}
-              <Link to="/profile" className="account-link" onClick={() => setOpen(false)}><Avatar user={user} size={30} /><span>{user.username}</span></Link>
-              <button className="btn btn-small btn-ghost" onClick={() => { logout(); navigate('/') }}>Log out</button>
-            </>
-          ) : (
-            <>
-              <Link className="btn btn-small btn-ghost" to="/login" onClick={() => setOpen(false)}>Log in</Link>
-              <Link className="btn btn-small" to="/register" onClick={() => setOpen(false)}>Create account</Link>
-            </>
-          )}
+      <div className="topline">
+        <div className="container topline-inner">
+          <span>{today}</span>
+          <div className="topline-account">
+            {user ? (
+              <>
+                {isStaff && <Link to="/admin">Admin</Link>}
+                <Link to="/profile" className="account-link"><Avatar user={user} size={22} />{user.username}</Link>
+                <button className="link-btn" onClick={() => { logout(); navigate('/') }}>Log out</button>
+              </>
+            ) : (
+              <>
+                <Link to="/login">Log in</Link>
+                <Link to="/register" className="topline-cta">Subscribe free</Link>
+              </>
+            )}
+          </div>
         </div>
       </div>
-      <nav className={`category-nav ${open ? 'is-open' : ''}`} aria-label="Categories">
-        <div className="container category-nav-inner">
-          <NavLink to="/" end onClick={() => setOpen(false)}>Latest</NavLink>
-          {(cats.data || []).map((c) => (
-            <NavLink key={c.id} to={`/category/${c.slug}`} style={{ '--cat': c.color }} onClick={() => setOpen(false)}>{c.name}</NavLink>
-          ))}
+      <div className="masthead" ref={mastRef}>
+        <Link to="/" className="masthead-title" aria-label={`${site.site_name} home`}>{site.site_name}</Link>
+        <p className="masthead-tagline">{site.site_tagline}</p>
+      </div>
+      <nav className={`navbar ${compact ? 'is-compact' : ''}`} aria-label="Main">
+        <div className="container navbar-inner">
+          <div className="navbar-left">
+            <button className={`sections-toggle ${sectionsOpen || sectionActive ? 'is-active' : ''}`} aria-expanded={sectionsOpen}
+              onClick={() => setSectionsOpen(!sectionsOpen)}>
+              <span className="burger" aria-hidden="true"><i /><i /><i /></span>Sections
+            </button>
+            <Link to="/" className="navbar-mark" aria-hidden={!compact} tabIndex={compact ? 0 : -1}>{site.site_name}</Link>
+          </div>
+          <div className="navbar-links">
+            <NavLink to="/latest">Latest</NavLink>
+            <NavLink to="/attention">Attention</NavLink>
+            <NavLink to="/about">About us</NavLink>
+          </div>
+          <div className="navbar-right">
+            {searchOpen ? (
+              <form onSubmit={submit} role="search" className="navbar-search">
+                <input autoFocus type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the archive" aria-label="Search" />
+              </form>
+            ) : null}
+            <button className="icon-search" aria-label={searchOpen ? 'Close search' : 'Search'} onClick={() => setSearchOpen(!searchOpen)}>
+              {searchOpen ? '×' : <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" strokeWidth="2" /><line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>}
+            </button>
+          </div>
         </div>
+        {sectionsOpen && <SectionsMenu onClose={() => setSectionsOpen(false)} />}
       </nav>
     </header>
   )
@@ -61,14 +121,30 @@ function Header() {
 
 function Footer() {
   const { site } = useAuth()
+  const cats = useAsync(() => api('/api/categories'), [])
   return (
     <footer className="site-footer">
-      <div className="container footer-inner">
+      <div className="container footer-grid">
         <div>
-          <div className="wordmark wordmark-small"><span className="wordmark-bar" aria-hidden="true" />{site.site_name}</div>
+          <div className="footer-title">{site.site_name}</div>
           <p>{site.site_tagline}</p>
         </div>
-        <p className="muted">Demo project: News &amp; Digital Magazine Portal (Phase 1). Articles are original explainers written for this demo.</p>
+        <div>
+          <h2 className="footer-head">Sections</h2>
+          <ul>{(cats.data || []).map((c) => <li key={c.id}><Link to={`/category/${c.slug}`}>{c.name}</Link></li>)}</ul>
+        </div>
+        <div>
+          <h2 className="footer-head">The magazine</h2>
+          <ul>
+            <li><Link to="/latest">Latest</Link></li>
+            <li><Link to="/attention">Attention</Link></li>
+            <li><Link to="/about">About us</Link></li>
+            <li><Link to="/search">Search the archive</Link></li>
+          </ul>
+        </div>
+      </div>
+      <div className="container footer-note">
+        Demo project for a News &amp; Digital Magazine Portal (Phase 1). Articles are original explainers written for this demo; cover art is generated.
       </div>
     </footer>
   )
@@ -87,7 +163,7 @@ function NotFound() {
     <div className="container narrow page-pad">
       <h1>Page not found</h1>
       <p>The page you asked for does not exist or has been unpublished.</p>
-      <Link className="btn" to="/">Back to the latest articles</Link>
+      <Link className="btn" to="/">Back to the front page</Link>
     </div>
   )
 }
@@ -107,9 +183,12 @@ export default function App() {
       <Header />
       <main id="main">
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/category/:categorySlug" element={<Home />} />
-          <Route path="/tag/:tagSlug" element={<Home />} />
+          <Route path="/" element={<FrontPage />} />
+          <Route path="/latest" element={<Latest />} />
+          <Route path="/category/:categorySlug" element={<Latest />} />
+          <Route path="/tag/:tagSlug" element={<Latest />} />
+          <Route path="/attention" element={<Attention />} />
+          <Route path="/about" element={<About />} />
           <Route path="/article/:slug" element={<Article />} />
           <Route path="/search" element={<Search />} />
           <Route path="/login" element={<Login />} />

@@ -1,6 +1,7 @@
 """FastAPI application: REST API under /api, uploaded media under /media, React build at /."""
 from __future__ import annotations
 
+import mimetypes
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,14 +10,24 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.database import init_db
+from app.database import SessionLocal, init_db
 from app.routers import admin_content, admin_moderation, admin_seo, admin_system, auth, public, search, users
+
+
+# Windows can map .svg/.js to the wrong type via the registry; browsers then refuse to show the file.
+mimetypes.add_type("image/svg+xml", ".svg")
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
     settings.media_dir.mkdir(parents=True, exist_ok=True)
+    from seed.covers import ensure_covers  # generated artwork, refreshed when its version changes
+
+    with SessionLocal() as db:
+        ensure_covers(db)
     yield
 
 

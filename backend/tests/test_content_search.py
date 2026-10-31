@@ -75,3 +75,21 @@ def test_search_filters_and_logging(client, tokens, published_doc):
         assert click.timestamp is not None
     logs = client.get("/api/admin/search-logs?event_type=click", headers=tokens["seo_specialist"]).json()
     assert logs["total"] >= 1
+
+
+def test_magazine_endpoints(client, published_doc):
+    front = client.get("/api/front-page").json()
+    assert front["cover"]["doc"]["slug"] and front["cover"]["label"] == "Cover story"
+    ids = [front["cover"]["doc"]["id"]] + [f["doc"]["id"] for f in front["features"]]
+    assert len(ids) == len(set(ids)), "the cover story is never repeated on the front page"
+    assert {"latest", "sections", "trending_queries"} <= set(front)
+    att = client.get("/api/attention?days=30").json()
+    assert att["most_read"] and "value" in att["most_read"][0]
+    assert {"most_searched", "trending_queries", "most_discussed", "top_rated", "most_liked"} <= set(att)
+    about = client.get("/api/about").json()
+    assert about["stats"]["articles"] >= 1 and about["writers"] and about["sections"]
+
+
+def test_svg_cover_served_as_image(client):
+    import mimetypes
+    assert mimetypes.guess_type("x.svg")[0] == "image/svg+xml"

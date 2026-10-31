@@ -11,7 +11,7 @@ Phase 2 (tokenization, inverted index, BM25/TF-IDF ranking).
 | **Backend** | Python 3.11+ · FastAPI (REST API, OpenAPI docs at `/docs`) · SQLAlchemy 2 |
 | **Database** | PostgreSQL 16 (recommended) or SQLite (zero-setup quick start) |
 | **Auth** | JWT bearer tokens, bcrypt password hashing |
-| **Frontend** | React 18 + Vite, responsive, custom CSS (no UI framework) |
+| **Frontend** | React 18 + Vite, responsive black-and-gold magazine design, custom CSS (no UI framework) |
 | **Tests** | 26 API tests (pytest), passing on SQLite **and** PostgreSQL |
 
 ![Home page](docs/screenshots/01-home.png)
@@ -75,7 +75,7 @@ npm run build      # writes the production bundle to backend/frontend_dist
 
 | Requirement | Implementation |
 |---|---|
-| Home & directory: paginated latest items with summary snippets | `/` (lead story + grid), `/category/:slug`, `/tag/:slug` · `GET /api/documents?page=&category=&tag=` |
+| Home & directory: paginated latest items with summary snippets | Magazine front page `/` (one cover story chosen by reader attention, then Newest / Most searched / Most read, "In this issue" contents, trending searches) · **Latest** `/latest` (paginated, grouped by month) · section pages via the **Sections** menu (`/category/:slug`) and `/tag/:slug` · **Attention** `/attention` (most read, most searched, trending queries, most discussed, highest rated, most liked) · **About us** `/about` · APIs: `GET /api/front-page`, `/api/documents`, `/api/attention`, `/api/about` |
 | Detail view: full content, images, author, date, views, categories, tags | `/article/:slug` · `GET /api/documents/{slug}` (increments `views_count`, records a view event) |
 | Registration, login, profile management | `/register`, `/login`, `/profile` (name, email, bio, avatar, password) · `/u/:username` public profile |
 | Commenting | Threaded comments and replies · `POST /api/documents/{id}/comments` |
@@ -191,7 +191,9 @@ built from `documents.content_text` and BM25/TF-IDF scoring without changing the
 
 | | |
 |---|---|
-| ![Article](docs/screenshots/02-article.png) | ![Search](docs/screenshots/04-search.png) |
+| ![Sections menu](docs/screenshots/01b-sections-menu.png) | ![Article](docs/screenshots/02-article.png) |
+| ![Latest](docs/screenshots/14-latest.png) | ![Attention](docs/screenshots/15-attention.png) |
+| ![About us](docs/screenshots/16-about.png) | ![Search](docs/screenshots/04-search.png) |
 | ![Content manager](docs/screenshots/05-admin-content-manager.png) | ![Moderator](docs/screenshots/06-admin-moderator.png) |
 | ![Analytics](docs/screenshots/07-admin-seo-analytics.png) | ![Roles](docs/screenshots/08-admin-super-roles.png) |
 | ![Search & click log](docs/screenshots/10-admin-search-click-log.png) | ![Mobile](docs/screenshots/12-mobile-home.png) |

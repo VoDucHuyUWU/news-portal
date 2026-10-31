@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api.js'
 import { useAuth } from '../auth.jsx'
-import { ArticleCard, Avatar, CategoryLink, ErrorBox, Loading, Modal, Notice, TagList, fmtDate, num, timeAgo, useAsync,
+import { Avatar, ErrorBox, Loading, Modal, Notice, TagList, fmtDate, num, timeAgo, useAsync,
   useDocTitle } from '../ui.jsx'
 
 function Stars({ value, onRate, disabled }) {
@@ -176,50 +176,88 @@ function Comments({ doc }) {
   )
 }
 
+function ReadingProgress() {
+  const [pct, setPct] = useState(0)
+  useEffect(() => {
+    const onScroll = () => {
+      const el = document.querySelector('.article-main')
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const total = rect.height - window.innerHeight * 0.6
+      setPct(Math.min(100, Math.max(0, (-rect.top / Math.max(1, total)) * 100)))
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+  return <div className="progress" aria-hidden="true"><span style={{ width: `${pct}%` }} /></div>
+}
+
+function useOutline(html) {
+  const [items, setItems] = useState([])
+  useEffect(() => {
+    const heads = [...document.querySelectorAll('.prose h2')]
+    heads.forEach((h, i) => { h.id = `section-${i + 1}` })
+    setItems(heads.map((h) => ({ id: h.id, text: h.textContent })))
+  }, [html])
+  return items
+}
+
 export default function Article() {
   const { slug } = useParams()
   const { user, site } = useAuth()
   const doc = useAsync(() => api(`/api/documents/${slug}`), [slug, user?.id])
   const related = useAsync(() => api(`/api/documents/${slug}/related`), [slug])
   const [eng, setEng] = useState(null)
+  const [copied, setCopied] = useState(false)
   const d = doc.data
+  const outline = useOutline(d?.content)
   useEffect(() => { setEng(null); window.scrollTo(0, 0) }, [slug])
   useDocTitle(d ? (d.seo?.meta_title || `${d.title} | ${site.site_name}`) : site.site_name, d?.seo?.meta_description || d?.summary)
   if (doc.loading && !d) return <div className="container page-pad"><Loading /></div>
-  if (doc.error) return <div className="container narrow page-pad"><ErrorBox error={doc.error} /><Link to="/">Back to home</Link></div>
+  if (doc.error) return <div className="container narrow page-pad"><ErrorBox error={doc.error} /><Link to="/">Back to the front page</Link></div>
   const e = eng || d
   const like = async () => setEng(await api(`/api/documents/${d.id}/like`, { method: 'POST' }))
   const rate = async (score) => setEng(await api(`/api/documents/${d.id}/rating`, { method: 'PUT', body: { score } }))
+  const copy = () => navigator.clipboard?.writeText(window.location.href).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })
   return (
-    <article className="article" style={{ '--cat': d.category?.color }}>
-      <header className="container article-head">
-        <div className="card-meta"><CategoryLink category={d.category} /><span>{d.reading_minutes} min read</span></div>
-        <h1 className="article-title">{d.title}</h1>
-        <p className="article-dek">{d.summary}</p>
+    <article className="article">
+      <ReadingProgress />
+      <header className="article-hero">
+        <div className="container article-hero-inner">
+          <p className="kicker">{d.category && <Link to={`/category/${d.category.slug}`}>{d.category.name}</Link>}<span>{d.reading_minutes} min read</span></p>
+          <h1 className="article-title">{d.title}</h1>
+          <p className="article-dek">{d.summary}</p>
+          <p className="byline">By {d.author ? <Link to={`/u/${d.author.username}`}><strong>{d.author.full_name}</strong></Link> : 'Staff'}
+            <span>{fmtDate(d.published_at)}</span><span>{num(d.views_count)} reads</span></p>
+        </div>
       </header>
       {d.cover_image_url && (
         <figure className="container article-cover">
           <img src={d.cover_image_url} alt={d.seo?.image_alt || ''} />
+          {d.seo?.image_alt && <figcaption>{d.seo.image_alt}</figcaption>}
         </figure>
       )}
       <div className="container article-layout">
         <aside className="article-margin" aria-label="Article details">
-          <div className="margin-note">
-            <Avatar user={d.author} size={40} />
-            <div><span className="note-label">Written by</span>
-              {d.author ? <Link to={`/u/${d.author.username}`}>{d.author.full_name}</Link> : 'Staff'}</div>
-          </div>
+          {outline.length > 0 && (
+            <nav className="outline" aria-label="In this article">
+              <span className="note-label">In this article</span>
+              <ol>{outline.map((o) => <li key={o.id}><a href={`#${o.id}`}>{o.text}</a></li>)}</ol>
+            </nav>
+          )}
           <dl className="margin-facts">
-            <div><dt>Published</dt><dd>{fmtDate(d.published_at)}</dd></div>
-            <div><dt>Views</dt><dd>{num(d.views_count)}</dd></div>
             <div><dt>Rating</dt><dd>{e.rating_avg ? `${e.rating_avg.toFixed(1)} / 5 (${e.rating_count})` : 'Not rated yet'}</dd></div>
+            <div><dt>Likes</dt><dd>{e.like_count}</dd></div>
             <div><dt>Comments</dt><dd>{d.comment_count}</dd></div>
           </dl>
           <TagList tags={d.tags} />
+          <button className="link-btn share" onClick={copy}>{copied ? 'Link copied' : 'Copy link to share'}</button>
         </aside>
         <div className="article-main">
           {d.status && d.status !== 'published' && <Notice kind="warn">Preview: this article is not published.</Notice>}
-          <div className="prose" dangerouslySetInnerHTML={{ __html: d.content }} />
+          <div className="prose dropcap" dangerouslySetInnerHTML={{ __html: d.content }} />
+          <p className="endmark" aria-hidden="true">◆</p>
           <div className="engage">
             {user ? (
               <>
@@ -230,16 +268,34 @@ export default function Article() {
                 <ReportButton targetType="document" targetId={d.id} label="Report a problem" />
               </>
             ) : (
-              <p className="muted">♥ {e.like_count} likes · <Link to={`/login?next=/article/${d.slug}`}>Log in</Link> to like, rate and comment.</p>
+              <p className="muted">♥ {e.like_count} likes. <Link to={`/login?next=/article/${d.slug}`}>Log in</Link> to like, rate and comment.</p>
             )}
           </div>
+          {d.author && (
+            <div className="author-box">
+              <Avatar user={d.author} size={56} />
+              <div><span className="note-label">About the writer</span>
+                <Link to={`/u/${d.author.username}`} className="author-name">{d.author.full_name}</Link>
+                <p>{d.author.bio}</p></div>
+            </div>
+          )}
           <Comments doc={d} />
         </div>
       </div>
       {related.data?.length > 0 && (
-        <section className="container related">
-          <h2 className="side-title">Keep reading</h2>
-          <div className="card-grid">{related.data.map((r) => <ArticleCard key={r.id} doc={r} />)}</div>
+        <section className="up-next">
+          <div className="container">
+            <h2>Up next</h2>
+            <div className="strip-grid">
+              {related.data.map((r) => (
+                <article key={r.id} className="strip-item strip-item-dark">
+                  <Link to={`/article/${r.slug}`} tabIndex={-1} aria-hidden="true"><img src={r.cover_image_url} alt="" loading="lazy" /></Link>
+                  <p className="kicker">{r.category?.name}</p>
+                  <h3><Link to={`/article/${r.slug}`}>{r.title}</Link></h3>
+                </article>
+              ))}
+            </div>
+          </div>
         </section>
       )}
     </article>

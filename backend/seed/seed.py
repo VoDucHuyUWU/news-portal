@@ -31,6 +31,7 @@ from app.utils import html_to_text, slugify  # noqa: E402
 from seed.articles_business_education import ARTICLES as BUSINESS_EDUCATION  # noqa: E402
 from seed.articles_health_environment import ARTICLES as HEALTH_ENVIRONMENT  # noqa: E402
 from seed.articles_tech_science import ARTICLES as TECH_SCIENCE  # noqa: E402
+from seed.covers import COVER_VERSION, write_cover  # noqa: E402
 
 RNG_SEED = 42
 DEMO_PASSWORD = "demo1234"
@@ -105,29 +106,6 @@ SEARCH_QUERIES = [
 ]
 
 
-def make_cover(slug: str, category: str, color: str, rng: random.Random) -> str:
-    """Generate a deterministic abstract SVG cover image; returns its URL."""
-    folder = settings.media_dir / "covers"
-    folder.mkdir(parents=True, exist_ok=True)
-    shapes = []
-    for _ in range(7):
-        x, y, r = rng.randint(-100, 1300), rng.randint(-100, 730), rng.randint(60, 260)
-        opacity = rng.choice([0.10, 0.16, 0.22, 0.30])
-        if rng.random() < 0.55:
-            shapes.append(f'<circle cx="{x}" cy="{y}" r="{r}" fill="#ffffff" fill-opacity="{opacity}"/>')
-        else:
-            shapes.append(f'<rect x="{x}" y="{y}" width="{r * 1.6:.0f}" height="{r * 0.7:.0f}" rx="18" '
-                          f'transform="rotate({rng.randint(-35, 35)} {x} {y})" fill="#0b1020" fill-opacity="{opacity / 2:.2f}"/>')
-    lines = "".join(f'<line x1="{80 + i * 34}" y1="560" x2="{80 + i * 34 + 18}" y2="530" stroke="#ffffff" '
-                    f'stroke-opacity="0.55" stroke-width="5" stroke-linecap="round"/>' for i in range(rng.randint(3, 8)))
-    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">'
-           f'<rect width="1200" height="630" fill="{color}"/>{"".join(shapes)}{lines}'
-           f'<text x="80" y="610" font-family="Georgia, serif" font-size="30" fill="#ffffff" fill-opacity="0.9">'
-           f'{html.escape(category)}</text></svg>')
-    (folder / f"{slug}.svg").write_text(svg, encoding="utf-8")
-    return f"/media/covers/{slug}.svg"
-
-
 def body_to_html(body: str) -> str:
     parts = []
     for block in body.strip().split("\n\n"):
@@ -181,11 +159,12 @@ def seed(reset: bool = False) -> dict[str, int]:
                 author_id=users[art["author"]].id, status="draft" if is_draft else "published",
                 published_at=None if is_draft else published_at,
                 created_at=published_at - timedelta(days=rng.randint(1, 4)), updated_at=published_at,
-                cover_image_url=make_cover(slug, cats[art["category"]].name, cats[art["category"]].color, rng),
+                cover_image_url=write_cover(slug, art["category"]),
                 views_count=0, tags=[tags[t] for t in art["tags"]])
             docs.append(doc)
         db.add_all(docs)
         db.flush()
+        (settings.media_dir / "covers" / ".version").write_text(COVER_VERSION)
         published = [d for d in docs if d.status == "published"]
 
         # ---- SEO metadata: complete for ~70%, partial for the rest (work for the SEO specialist)
