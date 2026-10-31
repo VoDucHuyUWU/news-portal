@@ -9,7 +9,7 @@ env/
 # Local data (recreated by `python run.py`)
 *.db
 *.sqlite3
-backend/media/uploads/
+backend/media/
 
 # Frontend dependencies (the production build in backend/frontend_dist IS committed)
 frontend/node_modules/
