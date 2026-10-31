@@ -6,10 +6,13 @@ __pycache__/
 venv/
 env/
 
-# Local data (database, uploads) - recreated by `python run.py`
-backend/data/
+# Local data (recreated by `python run.py`)
 *.db
 *.sqlite3
+backend/media/uploads/
+
+# Frontend dependencies (the production build in backend/frontend_dist IS committed)
+frontend/node_modules/
 
 # Secrets
 .env

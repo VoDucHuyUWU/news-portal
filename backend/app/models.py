@@ -1,83 +1,34 @@
 """
-Database schema.
+Relational schema.
 
-Phase 2 (search engine) relies on two tables defined here:
-
-* ``documents``          - the Document Store. Required fields: id, title, content (HTML),
-                           summary, category_id, tags, author, created_at, views_count.
-                           ``content_text`` keeps a plain-text copy of ``content`` so the
-                           tokenizer / inverted index can read it without stripping HTML.
-                           Tags and author are normalised (``document_tags`` table and
-                           ``author_id`` foreign key); the API returns them inline.
-* ``search_click_logs``  - one row per interaction event. Required fields: user_id,
-                           query_string, clicked_doc_id, timestamp. A search creates an
-                           ``event_type='search'`` row (clicked_doc_id NULL); a click on a
-                           result creates an ``event_type='click'`` row that points back to
-                           its search (``search_log_id``) and records ``rank_position``.
-                           ``source='seed'`` marks demo rows so they can be excluded later.
+Phase-2 critical tables
+    documents          id, title, content (HTML), content_text (plain text for tokenization),
+                       summary, category_id, tags (document_tags), author (author_id),
+                       created_at, views_count
+    search_click_logs  user_id, query_string, clicked_doc_id, timestamp
+                       (+ event_type, search_id, results_count, click_rank, filters, session_id)
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, Text
+from sqlalchemy import (JSON, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Table, Text)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database import Base, utcnow
+from app.database import Base
 
-# --------------------------------------------------------------------------- RBAC
+
+def utcnow() -> datetime:
+    """Naive UTC timestamp (portable across PostgreSQL and SQLite)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 role_permissions = Table(
     "role_permissions", Base.metadata,
     Column("role_id", ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
     Column("permission_id", ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True),
 )
 
-
-class Role(Base):
-    __tablename__ = "roles"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(40), unique=True)
-    label: Mapped[str] = mapped_column(String(80))
-    description: Mapped[str] = mapped_column(String(255), default="")
-    permissions: Mapped[list[Permission]] = relationship(secondary=role_permissions, lazy="selectin")
-
-    @property
-    def permission_codes(self) -> set[str]:
-        return {p.code for p in self.permissions}
-
-
-class Permission(Base):
-    __tablename__ = "permissions"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    code: Mapped[str] = mapped_column(String(60), unique=True)
-    description: Mapped[str] = mapped_column(String(255), default="")
-
-
-class User(Base):
-    __tablename__ = "users"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    username: Mapped[str] = mapped_column(String(40), unique=True, index=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True)
-    password_hash: Mapped[str] = mapped_column(String(255))
-    full_name: Mapped[str] = mapped_column(String(120), default="")
-    bio: Mapped[str] = mapped_column(Text, default="")
-    avatar_url: Mapped[str] = mapped_column(String(500), default="")
-    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"))
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    is_muted: Mapped[bool] = mapped_column(Boolean, default=False)  # spam control: cannot comment
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    role: Mapped[Role] = relationship(lazy="joined")
-
-    @property
-    def permissions(self) -> set[str]:
-        return self.role.permission_codes if self.role else set()
-
-    def can(self, *codes: str) -> bool:
-        return any(code in self.permissions for code in codes)
-
-
-# ---------------------------------------------------------------------- taxonomy
 document_tags = Table(
     "document_tags", Base.metadata,
     Column("document_id", ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True),
@@ -85,82 +36,113 @@ document_tags = Table(
 )
 
 
+class Role(Base):
+    __tablename__ = "roles"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(50), unique=True)          # e.g. content_manager
+    label: Mapped[str] = mapped_column(String(80))                      # e.g. Content Manager
+    description: Mapped[str] = mapped_column(String(255), default="")
+    permissions: Mapped[list["Permission"]] = relationship(secondary=role_permissions, lazy="selectin")
+
+
+class Permission(Base):
+    __tablename__ = "permissions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(60), unique=True)          # e.g. documents.manage
+    description: Mapped[str] = mapped_column(String(255), default="")
+
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    full_name: Mapped[str] = mapped_column(String(120), default="")
+    bio: Mapped[str] = mapped_column(Text, default="")
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    role: Mapped[Role] = relationship(lazy="joined")
+
+    @property
+    def permission_codes(self) -> set[str]:
+        return {p.code for p in self.role.permissions}
+
+
 class Category(Base):
     __tablename__ = "categories"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(80), unique=True)
-    slug: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    slug: Mapped[str] = mapped_column(String(90), unique=True, index=True)
     description: Mapped[str] = mapped_column(String(500), default="")
-    color: Mapped[str] = mapped_column(String(9), default="#33415c")
+    color: Mapped[str] = mapped_column(String(9), default="#3D5AFE")
 
 
 class Tag(Base):
     __tablename__ = "tags"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(60), unique=True)
-    slug: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    slug: Mapped[str] = mapped_column(String(70), unique=True, index=True)
 
 
-# ---------------------------------------------------------------- document store
 class Document(Base):
     __tablename__ = "documents"
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(255))
     slug: Mapped[str] = mapped_column(String(280), unique=True, index=True)
-    content: Mapped[str] = mapped_column(Text)            # sanitised HTML
-    content_text: Mapped[str] = mapped_column(Text)       # plain text for Phase 2 tokenisation
     summary: Mapped[str] = mapped_column(Text, default="")
-    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), index=True)
-    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    cover_image_url: Mapped[str] = mapped_column(String(500), default="")
-    status: Mapped[str] = mapped_column(String(12), default="draft", index=True)  # draft | published
+    content: Mapped[str] = mapped_column(Text)                          # sanitised HTML
+    content_text: Mapped[str] = mapped_column(Text, default="")         # plain text (Phase 2 tokenizer input)
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True)
+    author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    cover_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)   # draft | published
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
     views_count: Mapped[int] = mapped_column(Integer, default=0)
 
-    category: Mapped[Category] = relationship(lazy="joined")
-    author: Mapped[User] = relationship(lazy="joined")
+    category: Mapped[Category | None] = relationship(lazy="joined")
+    author: Mapped[User | None] = relationship(lazy="joined")
     tags: Mapped[list[Tag]] = relationship(secondary=document_tags, lazy="selectin", order_by="Tag.name")
-    seo: Mapped[SeoMetadata | None] = relationship(back_populates="document", uselist=False, lazy="selectin",
-                                                   cascade="all, delete-orphan")
+    seo: Mapped["SeoMetadata | None"] = relationship(back_populates="document", uselist=False, lazy="selectin",
+                                                     cascade="all, delete-orphan")
 
 
 class SeoMetadata(Base):
     __tablename__ = "seo_metadata"
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True)
-    meta_title: Mapped[str] = mapped_column(String(70), default="")
-    meta_description: Mapped[str] = mapped_column(String(320), default="")
-    keywords: Mapped[str] = mapped_column(String(500), default="")
-    cover_image_alt: Mapped[str] = mapped_column(String(255), default="")
+    meta_title: Mapped[str] = mapped_column(String(255), default="")
+    meta_description: Mapped[str] = mapped_column(String(500), default="")
+    keywords: Mapped[str] = mapped_column(String(500), default="")      # comma separated
+    image_alt: Mapped[str] = mapped_column(String(255), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
-    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     document: Mapped[Document] = relationship(back_populates="seo")
 
 
-# -------------------------------------------------------------------- engagement
 class Comment(Base):
     __tablename__ = "comments"
     id: Mapped[int] = mapped_column(primary_key=True)
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("comments.id", ondelete="CASCADE"), nullable=True)
     content: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(12), default="visible", index=True)  # visible|pending|hidden|spam
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    moderated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    moderated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    user: Mapped[User] = relationship(foreign_keys=[user_id], lazy="joined")
+    status: Mapped[str] = mapped_column(String(20), default="visible", index=True)  # visible|pending|hidden|spam
+    flag_reason: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    user: Mapped[User] = relationship(lazy="joined")
     document: Mapped[Document] = relationship(lazy="joined")
-    mentions: Mapped[list[User]] = relationship(secondary="comment_mentions", lazy="selectin")
 
 
 class CommentMention(Base):
-    """User tagging: an @username inside a comment."""
+    """User tagging: '@username' inside a comment."""
     __tablename__ = "comment_mentions"
     comment_id: Mapped[int] = mapped_column(ForeignKey("comments.id", ondelete="CASCADE"), primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    mentioned_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    comment: Mapped[Comment] = relationship(lazy="joined")
 
 
 class Like(Base):
@@ -174,61 +156,63 @@ class Rating(Base):
     __tablename__ = "ratings"
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True)
-    score: Mapped[int] = mapped_column(Integer)  # 1..5
+    score: Mapped[int] = mapped_column(Integer)                          # 1..5
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class Report(Base):
     __tablename__ = "reports"
     id: Mapped[int] = mapped_column(primary_key=True)
-    reporter_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    target_type: Mapped[str] = mapped_column(String(12))  # comment | document
+    reporter_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    target_type: Mapped[str] = mapped_column(String(20))                 # comment | document
     target_id: Mapped[int] = mapped_column(Integer)
     reason: Mapped[str] = mapped_column(String(500))
-    status: Mapped[str] = mapped_column(String(12), default="open", index=True)  # open|resolved|dismissed
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)  # open|resolved|dismissed
     resolution_note: Mapped[str] = mapped_column(String(500), default="")
-    handled_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    handled_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     handled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-    reporter: Mapped[User] = relationship(foreign_keys=[reporter_id], lazy="joined")
+    reporter: Mapped[User | None] = relationship(foreign_keys=[reporter_id], lazy="joined")
 
 
-# ------------------------------------------------------- interaction logs (Phase 2)
 class SearchClickLog(Base):
+    """
+    Standardised interaction log (one row per event).
+
+    event_type = "search": user ran query_string; clicked_doc_id is NULL.
+    event_type = "click":  user clicked clicked_doc_id from the results of search_id
+                           (click_rank = 1-based position in the result list).
+    """
     __tablename__ = "search_click_logs"
     id: Mapped[int] = mapped_column(primary_key=True)
-    event_type: Mapped[str] = mapped_column(String(10), index=True)  # search | click
+    event_type: Mapped[str] = mapped_column(String(10), default="search", index=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    session_id: Mapped[str] = mapped_column(String(64), default="")
+    session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     query_string: Mapped[str] = mapped_column(String(500), index=True)
-    filters: Mapped[dict] = mapped_column(JSON, default=dict)
+    filters: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     results_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    clicked_doc_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"),
-                                                       nullable=True, index=True)
-    rank_position: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-based position of the click
-    search_log_id: Mapped[int | None] = mapped_column(ForeignKey("search_click_logs.id", ondelete="SET NULL"),
-                                                      nullable=True)
-    source: Mapped[str] = mapped_column(String(10), default="web")  # web | seed
+    search_id: Mapped[int | None] = mapped_column(ForeignKey("search_click_logs.id", ondelete="SET NULL"), nullable=True)
+    clicked_doc_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"), nullable=True, index=True)
+    click_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class DocumentView(Base):
+    """One row per article view (feeds the analytics dashboard)."""
     __tablename__ = "document_views"
     id: Mapped[int] = mapped_column(primary_key=True)
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    source: Mapped[str] = mapped_column(String(10), default="web")
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
-# ------------------------------------------------------------- system & settings
 class AuditLog(Base):
+    """System log of security-relevant and administrative actions."""
     __tablename__ = "audit_logs"
     id: Mapped[int] = mapped_column(primary_key=True)
     actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     action: Mapped[str] = mapped_column(String(60), index=True)
-    entity_type: Mapped[str] = mapped_column(String(40), default="")
+    entity: Mapped[str] = mapped_column(String(40), default="")
     entity_id: Mapped[str] = mapped_column(String(40), default="")
     detail: Mapped[str] = mapped_column(Text, default="")
     ip_address: Mapped[str] = mapped_column(String(64), default="")
@@ -239,9 +223,7 @@ class AuditLog(Base):
 class Setting(Base):
     __tablename__ = "settings"
     key: Mapped[str] = mapped_column(String(60), primary_key=True)
-    value: Mapped[dict | list | str | int | bool | None] = mapped_column(JSON)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
-    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    value: Mapped[str] = mapped_column(Text, default="")
 
 
 Index("ix_documents_status_published", Document.status, Document.published_at)

@@ -1,1 +1,1 @@
-"""Lantern - News & Digital Magazine Portal (Phase 1)."""
+"""Margin news portal backend."""

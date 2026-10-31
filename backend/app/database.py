@@ -1,40 +1,34 @@
-"""SQLAlchemy engine, session factory and declarative base."""
+"""SQLAlchemy engine/session. Works with PostgreSQL (recommended) and SQLite (quick local run)."""
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timezone
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from app.config import DATABASE_URL
-
-
-def utcnow() -> datetime:
-    """Naive UTC timestamp (stored the same way on SQLite and PostgreSQL)."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
-def make_engine(url: str):
-    kwargs = {"future": True}
-    if url.startswith("sqlite"):
-        kwargs["connect_args"] = {"check_same_thread": False}
-    engine = create_engine(url, **kwargs)
-    if url.startswith("sqlite"):
-        @event.listens_for(engine, "connect")
-        def _sqlite_pragmas(dbapi_conn, _record):  # enforce foreign keys on SQLite
-            cur = dbapi_conn.cursor()
-            cur.execute("PRAGMA foreign_keys=ON")
-            cur.close()
-    return engine
-
-
-engine = make_engine(DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+from app.config import settings
 
 
 class Base(DeclarativeBase):
     pass
+
+
+def make_engine(url: str):
+    if url.startswith("sqlite"):
+        engine = create_engine(url, connect_args={"check_same_thread": False})
+
+        @event.listens_for(engine, "connect")
+        def _sqlite_pragmas(dbapi_conn, _):  # enforce foreign keys in SQLite
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA foreign_keys=ON")
+            cur.close()
+
+        return engine
+    return create_engine(url, pool_pre_ping=True)
+
+
+engine = make_engine(settings.database_url)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
 def get_db() -> Iterator[Session]:
@@ -43,3 +37,14 @@ def get_db() -> Iterator[Session]:
         yield db
     finally:
         db.close()
+
+
+def init_db(bind=None) -> None:
+    """Create tables (if missing) and the RBAC/settings reference data."""
+    from app import models  # noqa: F401  (register models)
+    from app.bootstrap import ensure_reference_data
+
+    target = bind or engine
+    Base.metadata.create_all(bind=target)
+    with Session(target) as db:
+        ensure_reference_data(db)

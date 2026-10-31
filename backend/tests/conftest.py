@@ -1,20 +1,20 @@
-"""Test fixtures: a fresh database per test session, users for every role."""
+"""Test fixtures: a fresh database (SQLite by default, or TEST_DATABASE_URL) and one user per role."""
 import os
 import sys
 import tempfile
 from pathlib import Path
 
 _TMP = tempfile.mkdtemp(prefix="news_portal_test_")
-os.environ.setdefault("DATABASE_URL", f"sqlite:///{Path(_TMP, 'test.db').as_posix()}")
-os.environ["DATA_DIR"] = _TMP
+os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL", f"sqlite:///{Path(_TMP, 'test.db').as_posix()}")
+os.environ["MEDIA_DIR"] = str(Path(_TMP, "media"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
-from app.database import Base, SessionLocal, engine  # noqa: E402
-from app.main import app, init_db  # noqa: E402
+from app.database import Base, SessionLocal, engine, init_db  # noqa: E402
+from app.main import app  # noqa: E402
 from app.models import Category, Role, User  # noqa: E402
 from app.security import hash_password  # noqa: E402
 
@@ -37,30 +37,24 @@ def client():
         db.commit()
     with TestClient(app) as c:
         yield c
-
-
-def login(client, username: str) -> dict:
-    r = client.post("/api/auth/login", json={"username": username, "password": PASSWORD})
-    assert r.status_code == 200, r.text
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+    Base.metadata.drop_all(engine)
 
 
 @pytest.fixture(scope="session")
-def auth(client):
-    return {name: login(client, name) for name in ROLE_USERS.values()}
+def tokens(client):
+    out = {}
+    for role, username in ROLE_USERS.items():
+        r = client.post("/api/auth/login", json={"login": username, "password": PASSWORD})
+        assert r.status_code == 200, r.text
+        out[role] = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    return out
 
 
 @pytest.fixture(scope="session")
-def category_ids(client):
-    cats = client.get("/api/categories").json()
-    return {c["slug"]: c["id"] for c in cats}
-
-
-def make_doc(client, headers, category_id, title="Heat pumps in cold climates", status="published",
-             content=None, tags=("energy", "homes")):
-    body = content or ("<p>Heat pumps move heat instead of burning fuel. Modern units keep working "
-                       "well below freezing.</p><h2>Why it matters</h2><p>They cut energy bills.</p>")
-    r = client.post("/api/admin/documents", headers=headers, json={
-        "title": title, "content": body, "category_id": category_id, "tags": list(tags), "status": status})
+def published_doc(client, tokens):
+    body = {"title": "How heat pumps move warmth", "summary": "", "status": "published", "category_id": 1,
+            "content": "<p>A heat pump moves heat instead of making it.</p><p>It works like a fridge in reverse.</p>",
+            "new_tags": ["Energy", "Homes"]}
+    r = client.post("/api/admin/documents", json=body, headers=tokens["content_manager"])
     assert r.status_code == 201, r.text
     return r.json()
