@@ -4,6 +4,7 @@ import { api } from '../api.js'
 import { useAuth } from '../auth.jsx'
 import { Avatar, ErrorBox, Loading, Modal, Notice, TagList, fmtDate, num, timeAgo, useAsync,
   useDocTitle } from '../ui.jsx'
+import { useEnter } from '../motion.js'
 
 function Stars({ value, onRate, disabled }) {
   const [hover, setHover] = useState(0)
@@ -212,6 +213,7 @@ export default function Article() {
   const [copied, setCopied] = useState(false)
   const d = doc.data
   const outline = useOutline(d?.content)
+  const enterRef = useEnter([d?.id])
   useEffect(() => { setEng(null); window.scrollTo(0, 0) }, [slug])
   useDocTitle(d ? (d.seo?.meta_title || `${d.title} | ${site.site_name}`) : site.site_name, d?.seo?.meta_description || d?.summary)
   if (doc.loading && !d) return <div className="container page-pad"><Loading /></div>
@@ -221,19 +223,20 @@ export default function Article() {
   const rate = async (score) => setEng(await api(`/api/documents/${d.id}/rating`, { method: 'PUT', body: { score } }))
   const copy = () => navigator.clipboard?.writeText(window.location.href).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })
   return (
-    <article className="article">
+    <article className="article" ref={enterRef}>
       <ReadingProgress />
       <header className="article-hero">
         <div className="container article-hero-inner">
-          <p className="kicker">{d.category && <Link to={`/category/${d.category.slug}`}>{d.category.name}</Link>}<span>{d.reading_minutes} min read</span></p>
-          <h1 className="article-title">{d.title}</h1>
-          <p className="article-dek">{d.summary}</p>
-          <p className="byline">By {d.author ? <Link to={`/u/${d.author.username}`}><strong>{d.author.full_name}</strong></Link> : 'Staff'}
+          <p className="kicker" data-e>{d.category && <Link to={`/category/${d.category.slug}`}>{d.category.name}</Link>}<span>{d.reading_minutes} min read</span></p>
+          {/* keyed: the entrance splits this node into lines, so a new article gets a fresh one */}
+          <h1 className="article-title" key={d.id} data-split>{d.title}</h1>
+          <p className="article-dek" data-e>{d.summary}</p>
+          <p className="byline" data-e>By {d.author ? <Link to={`/u/${d.author.username}`}><strong>{d.author.full_name}</strong></Link> : 'Staff'}
             <span>{fmtDate(d.published_at)}</span><span>{num(d.views_count)} reads</span></p>
         </div>
       </header>
       {d.cover_image_url && (
-        <figure className="container article-cover">
+        <figure className="container article-cover" data-e-img>
           <img src={d.cover_image_url} alt={d.seo?.image_alt || ''} />
           {d.seo?.image_alt && <figcaption>{d.seo.image_alt}</figcaption>}
         </figure>
@@ -288,9 +291,9 @@ export default function Article() {
             <h2>Up next</h2>
             <div className="strip-grid">
               {related.data.map((r) => (
-                <article key={r.id} className="strip-item strip-item-dark">
+                <article key={r.id} className="strip-item">
                   <Link to={`/article/${r.slug}`} tabIndex={-1} aria-hidden="true"><img src={r.cover_image_url} alt="" loading="lazy" /></Link>
-                  <p className="kicker">{r.category?.name}</p>
+                  <p className="kicker kicker-dark">{r.category?.name}</p>
                   <h3><Link to={`/article/${r.slug}`}>{r.title}</Link></h3>
                 </article>
               ))}

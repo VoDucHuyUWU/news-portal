@@ -3,6 +3,7 @@ import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from
 import { useAuth } from './auth.jsx'
 import { api } from './api.js'
 import { Avatar, Loading, useAsync } from './ui.jsx'
+import { usePageEnter } from './motion.js'
 import FrontPage from './pages/FrontPage.jsx'
 import Latest from './pages/Latest.jsx'
 import Attention from './pages/Attention.jsx'
@@ -15,8 +16,10 @@ import UserPage from './pages/UserPage.jsx'
 import AdminApp from './pages/admin/AdminApp.jsx'
 
 const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+const NAV = [['/latest', 'Latest'], ['/attention', 'Attention'], ['/about', 'About us']]
 
 function SectionsMenu({ onClose }) {
+  const { user, logout } = useAuth()
   const cats = useAsync(() => api('/api/categories'), [])
   const ref = useRef(null)
   useEffect(() => {
@@ -27,15 +30,23 @@ function SectionsMenu({ onClose }) {
     return () => { window.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onClick) }
   }, [onClose])
   return (
-    <div className="sections-panel" ref={ref} role="dialog" aria-label="Sections">
-      <div className="container sections-grid">
-        {(cats.data || []).map((c) => (
-          <Link key={c.id} to={`/category/${c.slug}`} className="section-entry" onClick={onClose}>
-            <span className="section-entry-name">{c.name}</span>
-            <span className="section-entry-desc">{c.description}</span>
-            <span className="section-entry-count">{c.document_count} stories</span>
-          </Link>
-        ))}
+    <div className="sections-panel" ref={ref} id="sections-panel">
+      <div className="container">
+        {/* phones: the bar has no room for these, so they live in the panel */}
+        <div className="panel-links">
+          {NAV.map(([to, label]) => <NavLink key={to} to={to} onClick={onClose}>{label}</NavLink>)}
+          {user ? <button className="link-btn" onClick={() => { logout(); onClose() }}>Log out</button>
+            : <><NavLink to="/login" onClick={onClose}>Log in</NavLink><NavLink to="/register" onClick={onClose}>Subscribe free</NavLink></>}
+        </div>
+        <div className="sections-grid">
+          {(cats.data || []).map((c) => (
+            <Link key={c.id} to={`/category/${c.slug}`} className="section-entry" onClick={onClose}>
+              <span className="section-entry-name">{c.name}</span>
+              <span className="section-entry-desc">{c.description}</span>
+              <span className="section-entry-count">{c.document_count} stories</span>
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -45,19 +56,10 @@ function Header() {
   const { user, site, logout, isStaff } = useAuth()
   const [sectionsOpen, setSectionsOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
-  const [compact, setCompact] = useState(false)
   const [q, setQ] = useState('')
-  const mastRef = useRef(null)
   const navigate = useNavigate()
   const location = useLocation()
   useEffect(() => { setSectionsOpen(false); setSearchOpen(false) }, [location.pathname])
-  useEffect(() => {
-    const el = mastRef.current
-    if (!el || !('IntersectionObserver' in window)) return
-    const obs = new IntersectionObserver(([e]) => setCompact(!e.isIntersecting))
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
   const submit = (e) => {
     e.preventDefault()
     if (q.trim()) navigate(`/search?q=${encodeURIComponent(q.trim())}`)
@@ -65,42 +67,15 @@ function Header() {
   const sectionActive = location.pathname.startsWith('/category') || location.pathname.startsWith('/tag')
   return (
     <header className="site-header">
-      <div className="topline">
-        <div className="container topline-inner">
-          <span>{today}</span>
-          <div className="topline-account">
-            {user ? (
-              <>
-                {isStaff && <Link to="/admin">Admin</Link>}
-                <Link to="/profile" className="account-link"><Avatar user={user} size={22} />{user.username}</Link>
-                <button className="link-btn" onClick={() => { logout(); navigate('/') }}>Log out</button>
-              </>
-            ) : (
-              <>
-                <Link to="/login">Log in</Link>
-                <Link to="/register" className="topline-cta">Subscribe free</Link>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="masthead" ref={mastRef}>
-        <Link to="/" className="masthead-title" aria-label={`${site.site_name} home`}>{site.site_name}</Link>
-        <p className="masthead-tagline">{site.site_tagline}</p>
-      </div>
-      <nav className={`navbar ${compact ? 'is-compact' : ''}`} aria-label="Main">
+      <nav className="navbar" aria-label="Main">
         <div className="container navbar-inner">
-          <div className="navbar-left">
-            <button className={`sections-toggle ${sectionsOpen || sectionActive ? 'is-active' : ''}`} aria-expanded={sectionsOpen}
-              onClick={() => setSectionsOpen(!sectionsOpen)}>
-              <span className="burger" aria-hidden="true"><i /><i /><i /></span>Sections
-            </button>
-            <Link to="/" className="navbar-mark" aria-hidden={!compact} tabIndex={compact ? 0 : -1}>{site.site_name}</Link>
-          </div>
+          <Link to="/" className="navbar-mark" aria-label={`${site.site_name} home`}><i aria-hidden="true" />{site.site_name}</Link>
           <div className="navbar-links">
-            <NavLink to="/latest">Latest</NavLink>
-            <NavLink to="/attention">Attention</NavLink>
-            <NavLink to="/about">About us</NavLink>
+            <button className={`sections-toggle ${sectionsOpen || sectionActive ? 'is-active' : ''}`} aria-expanded={sectionsOpen}
+              aria-controls="sections-panel" onClick={() => setSectionsOpen(!sectionsOpen)}>
+              Sections<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+            {NAV.map(([to, label]) => <NavLink key={to} to={to}>{label}</NavLink>)}
           </div>
           <div className="navbar-right">
             {searchOpen ? (
@@ -111,6 +86,20 @@ function Header() {
             <button className="icon-search" aria-label={searchOpen ? 'Close search' : 'Search'} onClick={() => setSearchOpen(!searchOpen)}>
               {searchOpen ? '×' : <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" strokeWidth="2" /><line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>}
             </button>
+            <div className="navbar-account">
+              {user ? (
+                <>
+                  {isStaff && <Link to="/admin">Admin</Link>}
+                  <Link to="/profile" className="account-link"><Avatar user={user} size={26} /><span>{user.username}</span></Link>
+                  <button className="link-btn" onClick={() => { logout(); navigate('/') }}>Log out</button>
+                </>
+              ) : (
+                <>
+                  <Link to="/login">Log in</Link>
+                  <Link to="/register" className="btn btn-small btn-gold">Subscribe free</Link>
+                </>
+              )}
+            </div>
           </div>
         </div>
         {sectionsOpen && <SectionsMenu onClose={() => setSectionsOpen(false)} />}
@@ -128,6 +117,7 @@ function Footer() {
         <div>
           <div className="footer-title">{site.site_name}</div>
           <p>{site.site_tagline}</p>
+          <p className="footer-date">{today}</p>
         </div>
         <div>
           <h2 className="footer-head">Sections</h2>
@@ -170,6 +160,7 @@ function NotFound() {
 
 export default function App() {
   const location = useLocation()
+  usePageEnter(location.pathname)
   if (location.pathname.startsWith('/admin')) {
     return (
       <Routes>

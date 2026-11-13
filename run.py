@@ -30,6 +30,7 @@ def main() -> None:
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--no-browser", action="store_true")
     args = p.parse_args()
+    sys.stdout.reconfigure(errors="replace")  # a project path with non-ASCII letters must not crash the banner on Windows
 
     os.chdir(BACKEND)
     sys.path.insert(0, str(BACKEND))

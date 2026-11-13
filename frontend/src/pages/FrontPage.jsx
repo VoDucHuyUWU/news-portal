@@ -2,26 +2,42 @@ import { Link } from 'react-router-dom'
 import { api } from '../api.js'
 import { useAuth } from '../auth.jsx'
 import { ErrorBox, Loading, fmtDate, num, useAsync, useDocTitle } from '../ui.jsx'
+import { useEnter, useWordHighlight } from '../motion.js'
 
 const shortDate = (iso) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
 
 function CoverStory({ item }) {
   const d = item.doc
+  const ref = useEnter([d.id])
   return (
-    <section className="cover" aria-labelledby="cover-title">
+    <section className="cover" aria-labelledby="cover-title" ref={ref}>
       <div className="container cover-grid">
-        <Link to={`/article/${d.slug}`} className="cover-art" tabIndex={-1} aria-hidden="true">
+        <div className="cover-text">
+          <p className="kicker" data-e><span>Cover story</span>{d.category && <Link to={`/category/${d.category.slug}`}>{d.category.name}</Link>}</p>
+          <h1 id="cover-title" className="cover-title"><Link to={`/article/${d.slug}`} data-split>{d.title}</Link></h1>
+          <p className="cover-dek" data-e>{d.summary}</p>
+          <p className="byline" data-e>By <strong>{d.author?.full_name || 'Staff'}</strong><span>{fmtDate(d.published_at)}</span></p>
+          <div className="cover-actions" data-e>
+            <Link className="btn btn-gold" to={`/article/${d.slug}`}>Read the cover story</Link>
+            <Link className="btn btn-ghost" to="/latest">See all stories</Link>
+          </div>
+        </div>
+        <Link to={`/article/${d.slug}`} className="cover-art" tabIndex={-1} aria-hidden="true" data-e-img>
           <img src={d.cover_image_url} alt="" />
         </Link>
-        <div className="cover-text">
-          <p className="kicker"><span>Cover story</span>{d.category && <Link to={`/category/${d.category.slug}`}>{d.category.name}</Link>}</p>
-          <h1 id="cover-title" className="cover-title"><Link to={`/article/${d.slug}`}>{d.title}</Link></h1>
-          <p className="cover-dek">{d.summary}</p>
-          <p className="byline">By <strong>{d.author?.full_name || 'Staff'}</strong><span>{fmtDate(d.published_at)}</span></p>
-          <Link className="btn btn-gold" to={`/article/${d.slug}`}>Read the cover story</Link>
-          <p className="cover-why">Chosen by reader attention this week: views, searches, likes and comments.</p>
-        </div>
       </div>
+      <p className="container cover-why" data-e>Chosen by reader attention this week: views, searches, likes and comments.</p>
+    </section>
+  )
+}
+
+function Statement({ text }) {
+  const ref = useWordHighlight()
+  return (
+    <section className="statement" ref={ref} aria-label="What we publish">
+      <p className="container statement-text">
+        {text.split(/\s+/).map((w, i) => <span key={i} data-w>{w} </span>)}
+      </p>
     </section>
   )
 }
@@ -55,6 +71,8 @@ export default function FrontPage() {
       <section className="container features" aria-label="Featured stories">
         {f.features.map((item) => <Feature key={item.doc.id} item={item} />)}
       </section>
+
+      {site.site_tagline && <Statement text={site.site_tagline} />}
 
       <section className="contents" aria-labelledby="contents-title">
         <div className="container">

@@ -1,5 +1,5 @@
 """
-Generated cover illustrations: Art Deco gold line art on black, one motif per section.
+Generated cover illustrations: ink line art with red details on pale paper, one motif per section.
 
 Covers are deterministic (seeded by the article slug) and regenerated automatically
 when COVER_VERSION changes, so existing databases pick up new artwork without a reset.
@@ -15,8 +15,8 @@ from sqlalchemy import select
 from app.config import settings
 from app.models import Document
 
-COVER_VERSION = "deco-3"
-GOLD, LIGHT, DEEP = "#C9A227", "#E9D7A0", "#8A6D10"
+COVER_VERSION = "ink-1"
+GOLD, LIGHT, DEEP = "#0A0A0A", "#D92B21", "#B81F16"  # line, highlight, deep
 W, H = 1200, 630
 
 
@@ -31,15 +31,6 @@ def _sunburst(cx: float, cy: float, rng: random.Random) -> str:
     rings = "".join(f'<circle cx="{cx:.0f}" cy="{cy:.0f}" r="{r}" fill="none" stroke="{GOLD}" stroke-opacity="0.16" stroke-width="1"/>'
                     for r in (150, 230, 320))
     return "".join(rays) + rings
-
-
-def _frame() -> str:
-    corners = []
-    for x, y in ((28, 28), (W - 28, 28), (28, H - 28), (W - 28, H - 28)):
-        corners.append(f'<path d="M{x} {y - 9} L{x + 9} {y} L{x} {y + 9} L{x - 9} {y} Z" fill="{GOLD}"/>')
-    return (f'<rect x="28" y="28" width="{W - 56}" height="{H - 56}" fill="none" stroke="{GOLD}" stroke-width="1.6"/>'
-            f'<rect x="40" y="40" width="{W - 80}" height="{H - 80}" fill="none" stroke="{GOLD}" stroke-opacity="0.45" stroke-width="0.8"/>'
-            + "".join(corners))
 
 
 def _g(cx: float, cy: float, s: float, rot: float, body: str) -> str:
@@ -114,7 +105,7 @@ def _business(rng: random.Random) -> str:
     line = "<polyline points=\"" + " ".join(f"{x},{y}" for x, y in tops) + f'" stroke="{LIGHT}" stroke-width="3"/>'
     ex, ey = tops[-1]
     arrow = f'<path d="M{ex - 22} {ey - 4} L{ex} {ey - 24} L{ex + 6} {ey + 4}" stroke="{LIGHT}" stroke-width="3"/>'
-    coins = "".join(f'<ellipse cx="240" cy="{110 - k * 22}" rx="48" ry="14" fill="#0b0b0b"/>' for k in range(rng.randint(3, 6)))
+    coins = "".join(f'<ellipse cx="240" cy="{110 - k * 22}" rx="48" ry="14" fill="#F2F2F2"/>' for k in range(rng.randint(3, 6)))
     return '<line x1="-230" y1="122" x2="300" y2="122"/>' + bars + line + arrow + coins
 
 
@@ -139,9 +130,9 @@ def cover_svg(slug: str, category_slug: str | None) -> str:
     cx = rng.choice([420, 600, 780])
     cy = rng.choice([300, 330])
     motif = MOTIFS.get(category_slug or "", _science)(rng)
-    bg = rng.choice(["#0B0B0B", "#111111", "#0E0D0A"])
+    bg = rng.choice(["#F2F2F2", "#EFEFEC", "#F4F1EC"])
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}">'
-            f'<rect width="{W}" height="{H}" fill="{bg}"/>{_sunburst(cx, cy, rng)}{_frame()}'
+            f'<rect width="{W}" height="{H}" fill="{bg}"/>{_sunburst(cx, cy, rng)}'
             f'{_g(cx, cy, rng.uniform(1.05, 1.2), rng.choice([0, 0, -6, 6]), motif)}</svg>')
 
 
