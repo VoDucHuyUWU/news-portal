@@ -1,13 +1,15 @@
 """Public reading API plus reader engagement (comments, likes, ratings, reports)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import time
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy import and_, desc, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import schemas
 from app.database import get_db
-from app.deps import get_current_user, get_optional_user
+from app.deps import client_ip, get_current_user, get_optional_user
 from app.models import (Category, Comment, Document, DocumentView, Like, Rating, Report, Setting, Tag, User,
                         document_tags)
 from app.rbac import PUBLIC_SETTINGS
@@ -16,6 +18,24 @@ from app.services import (comment_rate_exceeded, comments_out, document_detail, 
 from app.utils import get_int_setting, get_setting, paginate
 
 router = APIRouter(prefix="/api", tags=["public"])
+
+VIEW_WINDOW_SECONDS = 30 * 60
+# shortcut: in-memory, so it resets on restart and is per worker; move to a document_views.session_id column
+# (or Redis) when running several workers. A client that rotates X-Session-Id can still inflate views.
+_recent_views: dict[tuple[str, int], float] = {}
+
+
+def _is_new_view(viewer: str, document_id: int) -> bool:
+    """True once per viewer per article per window, so refreshing does not inflate the view count."""
+    now = time.monotonic()
+    if len(_recent_views) > 50_000:
+        for key in [k for k, t in _recent_views.items() if now - t > VIEW_WINDOW_SECONDS]:
+            del _recent_views[key]
+    last = _recent_views.get((viewer, document_id))
+    if last is not None and now - last < VIEW_WINDOW_SECONDS:
+        return False
+    _recent_views[(viewer, document_id)] = now
+    return True
 
 
 def published():
@@ -79,10 +99,12 @@ def _get_published(db: Session, slug: str, user: User | None) -> Document:
 
 
 @router.get("/documents/{slug}", response_model=schemas.DocumentDetail)
-def get_document(slug: str, count_view: bool = True, user: User | None = Depends(get_optional_user),
-                 db: Session = Depends(get_db)):
+def get_document(slug: str, request: Request, count_view: bool = True,
+                 x_session_id: str | None = Header(default=None),
+                 user: User | None = Depends(get_optional_user), db: Session = Depends(get_db)):
     doc = _get_published(db, slug, user)
-    if count_view and doc.status == "published":
+    viewer = f"u{user.id}" if user else (x_session_id or client_ip(request))
+    if count_view and doc.status == "published" and _is_new_view(viewer, doc.id):
         db.execute(update(Document).where(Document.id == doc.id).values(views_count=Document.views_count + 1))
         db.add(DocumentView(document_id=doc.id, user_id=user.id if user else None))
         db.commit()

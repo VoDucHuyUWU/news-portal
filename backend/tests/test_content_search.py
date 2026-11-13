@@ -32,8 +32,11 @@ def test_document_crud_and_publication(client, tokens, published_doc):
 def test_public_listing_detail_and_views(client, published_doc):
     page = client.get("/api/documents?page=1&page_size=5").json()
     assert page["total"] >= 1 and page["page"] == 1 and "summary" in page["items"][0]
-    first = client.get(f"/api/documents/{published_doc['slug']}").json()
-    second = client.get(f"/api/documents/{published_doc['slug']}").json()
+    url = f"/api/documents/{published_doc['slug']}"
+    first = client.get(url, headers={"X-Session-Id": "reader-a"}).json()
+    refresh = client.get(url, headers={"X-Session-Id": "reader-a"}).json()
+    assert refresh["views_count"] == first["views_count"]  # refreshing does not inflate the count
+    second = client.get(url, headers={"X-Session-Id": "reader-b"}).json()
     assert second["views_count"] == first["views_count"] + 1
     for key in ("content", "author", "category", "tags", "created_at", "views_count", "reading_minutes"):
         assert key in second
