@@ -11,8 +11,8 @@ Phase 2 (tokenization, inverted index, BM25/TF-IDF ranking).
 | **Backend** | Python 3.11+ · FastAPI (REST API, OpenAPI docs at `/docs`) · SQLAlchemy 2 |
 | **Database** | PostgreSQL 16 (recommended) or SQLite (zero-setup quick start) |
 | **Auth** | JWT bearer tokens, bcrypt password hashing |
-| **Frontend** | React 18 + Vite, responsive black-and-gold magazine design, custom CSS (no UI framework) |
-| **Tests** | 26 API tests (pytest), passing on SQLite **and** PostgreSQL |
+| **Frontend** | React 18 + Vite, responsive editorial design (white, ink and one red accent), custom CSS (no UI framework), GSAP for motion |
+| **Tests** | 30 API tests (pytest), passing on SQLite **and** PostgreSQL |
 
 ![Home page](docs/screenshots/01-home.png)
 
@@ -76,7 +76,7 @@ npm run build      # writes the production bundle to backend/frontend_dist
 | Requirement | Implementation |
 |---|---|
 | Home & directory: paginated latest items with summary snippets | Magazine front page `/` (one cover story chosen by reader attention, then Newest / Most searched / Most read, "In this issue" contents, trending searches) · **Latest** `/latest` (paginated, grouped by month) · section pages via the **Sections** menu (`/category/:slug`) and `/tag/:slug` · **Attention** `/attention` (most read, most searched, trending queries, most discussed, highest rated, most liked) · **About us** `/about` · APIs: `GET /api/front-page`, `/api/documents`, `/api/attention`, `/api/about` |
-| Detail view: full content, images, author, date, views, categories, tags | `/article/:slug` · `GET /api/documents/{slug}` (increments `views_count`, records a view event) |
+| Detail view: full content, images, author, date, views, categories, tags | `/article/:slug` · `GET /api/documents/{slug}` (increments `views_count` and records a view event, once per reader per article per 30 minutes) |
 | Registration, login, profile management | `/register`, `/login`, `/profile` (name, email, bio, avatar, password) · `/u/:username` public profile |
 | Commenting | Threaded comments and replies · `POST /api/documents/{id}/comments` |
 | Rating / liking | Like toggle + 1–5 star rating · `POST .../like`, `PUT .../rating` |
@@ -185,7 +185,8 @@ built from `documents.content_text` and BM25/TF-IDF scoring without changing the
 - Basic search uses SQL `LIKE`, so there is no stemming, typo tolerance or relevance scoring beyond title matches (by design for Phase 1).
 - The SPA sets page titles and meta descriptions on the client; server-side rendering would be needed for full SEO.
 - Seeded interactions are synthetic; analytics become representative only with real traffic.
-- JWTs are stored in `localStorage` for simplicity; change `SECRET_KEY` before any real deployment.
+- JWTs are stored in `localStorage` for simplicity. Set `SECRET_KEY` in `.env` for a real deployment: without it the app uses a random key per start, so sign-ins end on every restart.
+- Sign-in is blocked for 5 minutes after 10 failed attempts from one IP; repeat views are filtered in memory, so both reset on restart and assume a single worker.
 
 ## Screenshots
 

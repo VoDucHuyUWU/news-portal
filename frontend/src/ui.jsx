@@ -60,7 +60,7 @@ export function ErrorBox({ error, onRetry }) {
 }
 
 export function Notice({ kind = 'info', children }) {
-  return <div className={`alert alert-${kind}`} role="status">{children}</div>
+  return <div className={`alert alert-${kind}`} role="status"><span>{children}</span></div>
 }
 
 export function Avatar({ user, size = 36 }) {

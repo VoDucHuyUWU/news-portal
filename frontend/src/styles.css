@@ -654,6 +654,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--ink); outline: 2
 .admin-main h1, .admin-main h2 { font-weight: 500; }
 .stat { border-radius: var(--radius-m); border-left-color: var(--accent); }
 .table-wrap, .mod-item, .editor-side { border-radius: var(--radius-m); }
+.editor-side { grid-template-columns: minmax(0, 1fr); } /* a wide child must not stretch the column past the panel */
+.alert-info { background: var(--surface); }
 .segmented button.is-active { background: var(--ink); color: #fff; }
 .chart .bar { fill: var(--ink); }
 .chart .bar:hover { fill: var(--accent); }
