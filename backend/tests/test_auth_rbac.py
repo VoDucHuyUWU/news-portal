@@ -101,3 +101,31 @@ def test_global_settings(client, tokens):
     r = client.post("/api/auth/register", json={"username": "late", "email": "late@x.io", "password": "secret123"})
     assert r.status_code == 403
     client.put("/api/admin/settings", json={"allow_registration": "true", "site_name": "Margin"}, headers=tokens["super_admin"])
+
+
+def test_spa_fallback_cannot_read_files_outside_the_build(client):
+    r = client.get("/..%2frequirements.txt")
+    assert "fastapi" not in r.text
+    assert "sqlalchemy" not in client.get("/%2e%2e/requirements.txt").text
+
+
+def test_login_is_blocked_after_repeated_failures(client):
+    from sqlalchemy import delete
+
+    from app.database import SessionLocal
+    from app.models import AuditLog
+    from app.routers.auth import MAX_LOGIN_FAILURES
+
+    bad = {"login": "reader", "password": "wrong-password"}
+    try:
+        with SessionLocal() as db:  # start from a clean count whatever ran before
+            db.execute(delete(AuditLog).where(AuditLog.action == "auth.login_failed"))
+            db.commit()
+        for _ in range(MAX_LOGIN_FAILURES):
+            assert client.post("/api/auth/login", json=bad).status_code == 401
+        assert client.post("/api/auth/login", json=bad).status_code == 429
+        assert client.post("/api/auth/login", json={"login": "reader", "password": "password123"}).status_code == 429
+    finally:
+        with SessionLocal() as db:  # do not lock out the tests that run after this one
+            db.execute(delete(AuditLog).where(AuditLog.action == "auth.login_failed"))
+            db.commit()

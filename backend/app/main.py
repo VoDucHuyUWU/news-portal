@@ -51,8 +51,10 @@ def spa(full_path: str):
     """Serve the built React app; unknown /api paths return JSON 404."""
     if full_path.startswith("api/"):
         return JSONResponse({"detail": "Not Found"}, status_code=404)
-    candidate = settings.frontend_dist / full_path
-    if full_path and candidate.is_file():
+    # resolve + containment check: "/..%2f.env" must not escape the build folder
+    root = settings.frontend_dist.resolve()
+    candidate = (root / full_path).resolve()
+    if full_path and candidate.is_relative_to(root) and candidate.is_file():
         return FileResponse(candidate)
     index = settings.frontend_dist / "index.html"
     if index.exists():

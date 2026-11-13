@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -25,10 +26,12 @@ _load_dotenv()
 
 @dataclass(frozen=True)
 class Settings:
+    # No SECRET_KEY set -> random key per process, never a guessable default.
+    # shortcut: logins end on restart and it breaks with several workers, set SECRET_KEY in .env to fix both
     # PostgreSQL example: postgresql+psycopg://news:news@localhost:5432/news_portal
     database_url: str = field(default_factory=lambda: os.getenv(
         "DATABASE_URL", f"sqlite:///{(BACKEND_DIR / 'news_portal.db').as_posix()}"))
-    secret_key: str = field(default_factory=lambda: os.getenv("SECRET_KEY", "dev-only-change-me-in-production"))
+    secret_key: str = field(default_factory=lambda: os.getenv("SECRET_KEY") or secrets.token_urlsafe(32))
     access_token_minutes: int = field(default_factory=lambda: int(os.getenv("ACCESS_TOKEN_MINUTES", "1440")))
     media_dir: Path = field(default_factory=lambda: Path(os.getenv("MEDIA_DIR", str(BACKEND_DIR / "media"))))
     frontend_dist: Path = BACKEND_DIR / "frontend_dist"

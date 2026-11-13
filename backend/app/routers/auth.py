@@ -1,6 +1,8 @@
 """Registration, login and the current user."""
 from __future__ import annotations
 
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -8,13 +10,16 @@ from sqlalchemy.orm import Session
 from app import schemas
 from app.database import get_db
 from app.deps import client_ip, get_current_user
-from app.models import Role, User, utcnow
+from app.models import AuditLog, Role, User, utcnow
 from app.rbac import DEFAULT_ROLE
 from app.security import create_access_token, hash_password, verify_password
 from app.services import user_me
 from app.utils import audit, get_bool_setting
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+# shortcut: counted per client IP, behind a reverse proxy every user shares one IP, read X-Forwarded-For then
+MAX_LOGIN_FAILURES = 10
+LOGIN_WINDOW_MINUTES = 5
 
 
 def _token_response(user: User) -> schemas.TokenOut:
@@ -48,6 +53,12 @@ def register(body: schemas.RegisterIn, request: Request, db: Session = Depends(g
 
 @router.post("/login", response_model=schemas.TokenOut)
 def login(body: schemas.LoginIn, request: Request, db: Session = Depends(get_db)):
+    ip = client_ip(request)
+    failures = db.scalar(select(func.count()).select_from(AuditLog).where(
+        AuditLog.action == "auth.login_failed", AuditLog.ip_address == ip,
+        AuditLog.timestamp >= utcnow() - timedelta(minutes=LOGIN_WINDOW_MINUTES))) or 0
+    if failures >= MAX_LOGIN_FAILURES:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many failed sign-ins. Try again in a few minutes.")
     ident = body.login.strip().lower()
     user = db.execute(select(User).where(or_(func.lower(User.username) == ident,
                                              func.lower(User.email) == ident))).scalar_one_or_none()
