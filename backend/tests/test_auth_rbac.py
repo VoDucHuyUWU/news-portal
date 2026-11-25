@@ -7,6 +7,7 @@ STAFF_ENDPOINTS = {
     ("GET", "/api/admin/permissions"): {"super_admin"},
     ("GET", "/api/admin/audit-logs"): {"super_admin"},
     ("GET", "/api/admin/settings"): {"super_admin"},
+    ("GET", "/api/admin/database/tables"): {"super_admin"},
     ("GET", "/api/admin/documents"): {"super_admin", "content_manager", "seo_specialist"},
     ("POST", "/api/admin/categories"): {"super_admin", "content_manager"},
     ("GET", "/api/admin/comments"): {"super_admin", "moderator"},

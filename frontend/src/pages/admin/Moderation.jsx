@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../api.js'
-import { Avatar, ErrorBox, Field, Loading, Notice, Pagination, StatusBadge, timeAgo, useAsync, useDocTitle } from '../../ui.jsx'
+import { Avatar, ColHead, ColumnPicker, DataTable, ErrorBox, Field, Loading, Notice, Pagination, StatusBadge, timeAgo, useAsync, useColumns, useDocTitle } from '../../ui.jsx'
 
 export function Comments() {
   const [params, setParams] = useSearchParams()
@@ -70,36 +70,29 @@ export function Reports() {
       list.reload()
     } catch (err) { setError(err) }
   }
+  const cols = useColumns('reports', [
+    { id: 'id', label: 'id', badge: 'PK', header: <ColHead name="id" pk />, tdClass: 'small', cell: (r) => r.id },
+    { id: 'reported', label: 'Reported', tdClass: 'nowrap', cell: (r) => timeAgo(r.created_at) },
+    { id: 'target', label: 'Target', cell: (r) => <><span className="badge">{r.target_type}</span> {r.target_link ? <Link to={r.target_link} target="_blank">{r.target_preview}</Link> : r.target_preview}</> },
+    { id: 'reason', label: 'Reason', cell: (r) => r.reason },
+    { id: 'by', label: 'By', badge: 'FK', header: <ColHead name="By" fk="users.id" />, cell: (r) => r.reporter?.username || '—' },
+    { id: 'actions', label: 'Actions', fixed: true, tdClass: 'actions', cell: (r) => (r.status === 'open' ? (<>
+      {r.target_type === 'comment' && <button className="btn btn-small" onClick={() => handle(r, 'resolved', 'hide')}>Hide comment</button>}
+      {r.target_type === 'comment' && <button className="btn btn-small btn-ghost" onClick={() => handle(r, 'resolved', 'spam')}>Mark spam</button>}
+      {r.target_type === 'document' && <button className="btn btn-small" onClick={() => handle(r, 'resolved', 'none')}>Resolve (forward to editors)</button>}
+      <button className="link-btn" onClick={() => handle(r, 'dismissed', 'none')}>Dismiss</button>
+    </>) : <StatusBadge status={r.status} />) },
+  ])
   return (
     <div>
       <div className="admin-head"><h1>Reports</h1><p className="muted">Flags submitted by readers about comments or articles.</p></div>
       <div className="segmented" role="group">
         {['open', 'resolved', 'dismissed'].map((s) => <button key={s} className={status === s ? 'is-active' : ''} onClick={() => setStatusFilter(s)}>{s}</button>)}
       </div>
+      <ColumnPicker cols={cols} />
       <ErrorBox error={error || list.error} />
       {list.loading && !list.data ? <Loading /> : (
-        <div className="table-wrap"><table className="table">
-          <thead><tr><th>Reported</th><th>Target</th><th>Reason</th><th>By</th><th>Actions</th></tr></thead>
-          <tbody>
-            {(list.data?.items || []).length === 0 && <tr><td colSpan={5} className="muted">No {status} reports.</td></tr>}
-            {(list.data?.items || []).map((r) => (
-              <tr key={r.id}>
-                <td className="nowrap">{timeAgo(r.created_at)}</td>
-                <td><span className="badge">{r.target_type}</span> {r.target_link ? <Link to={r.target_link} target="_blank">{r.target_preview}</Link> : r.target_preview}</td>
-                <td>{r.reason}</td>
-                <td>{r.reporter?.username || '—'}</td>
-                <td className="actions">
-                  {r.status === 'open' ? (<>
-                    {r.target_type === 'comment' && <button className="btn btn-small" onClick={() => handle(r, 'resolved', 'hide')}>Hide comment</button>}
-                    {r.target_type === 'comment' && <button className="btn btn-small btn-ghost" onClick={() => handle(r, 'resolved', 'spam')}>Mark spam</button>}
-                    {r.target_type === 'document' && <button className="btn btn-small" onClick={() => handle(r, 'resolved', 'none')}>Resolve (forward to editors)</button>}
-                    <button className="link-btn" onClick={() => handle(r, 'dismissed', 'none')}>Dismiss</button>
-                  </>) : <StatusBadge status={r.status} />}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table></div>
+        <DataTable cols={cols} rows={list.data?.items || []} empty={`No ${status} reports.`} />
       )}
     </div>
   )

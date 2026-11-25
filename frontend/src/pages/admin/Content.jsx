@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../../api.js'
 import { useAuth } from '../../auth.jsx'
-import { ErrorBox, Field, Loading, Modal, Notice, Pagination, StatusBadge, fmtDate, num, useAsync, useDocTitle } from '../../ui.jsx'
+import { ColHead, ColumnPicker, DataTable, ErrorBox, Field, Loading, Modal, Notice, Pagination, StatusBadge, fmtDate, num, useAsync, useColumns, useDocTitle } from '../../ui.jsx'
 
 export function Documents() {
   const { can } = useAuth()
@@ -18,6 +18,23 @@ export function Documents() {
     else await api(`/api/admin/documents/${doc.id}/${action}`, { method: 'POST' })
     list.reload()
   }
+  const cols = useColumns('articles', [
+    { id: 'id', label: 'id', badge: 'PK', header: <ColHead name="id" pk />, tdClass: 'small', cell: (d) => d.id },
+    { id: 'title', label: 'Title', cell: (d) => <><strong>{d.title}</strong><div className="muted small">{d.tags.map((t) => t.name).join(', ')}</div></> },
+    { id: 'category', label: 'Category', badge: 'FK', header: <ColHead name="Category" fk="categories.id" />, cell: (d) => d.category?.name || '—' },
+    { id: 'author', label: 'Author', badge: 'FK', header: <ColHead name="Author" fk="users.id" />, cell: (d) => d.author?.full_name || '—' },
+    { id: 'status', label: 'Status', cell: (d) => <StatusBadge status={d.status} /> },
+    { id: 'updated', label: 'Updated', tdClass: 'nowrap', cell: (d) => fmtDate(d.updated_at) },
+    { id: 'views', label: 'Views', thClass: 'num', tdClass: 'num', cell: (d) => num(d.views_count) },
+    { id: 'actions', label: 'Actions', fixed: true, tdClass: 'actions', cell: (d) => (<>
+      {can('documents.manage') && <Link to={`/admin/documents/${d.id}`}>Edit</Link>}
+      <Link to={`/article/${d.slug}`} target="_blank">View</Link>
+      {can('documents.publish') && (d.status === 'published'
+        ? <button className="link-btn" onClick={() => act(d, 'unpublish')}>Unpublish</button>
+        : <button className="link-btn" onClick={() => act(d, 'publish')}>Publish</button>)}
+      {can('documents.manage') && <button className="link-btn danger" onClick={() => act(d, 'delete')}>Delete</button>}
+    </>) },
+  ])
   return (
     <div>
       <div className="admin-head row-between">
@@ -32,33 +49,10 @@ export function Documents() {
           ))}
         </div>
       </form>
+      <ColumnPicker cols={cols} />
       <ErrorBox error={list.error} />
       {list.loading && !list.data ? <Loading /> : (
-        <div className="table-wrap">
-          <table className="table">
-            <thead><tr><th>Title</th><th>Category</th><th>Author</th><th>Status</th><th>Updated</th><th className="num">Views</th><th>Actions</th></tr></thead>
-            <tbody>
-              {(list.data?.items || []).map((d) => (
-                <tr key={d.id}>
-                  <td><strong>{d.title}</strong><div className="muted small">{d.tags.map((t) => t.name).join(', ')}</div></td>
-                  <td>{d.category?.name || '—'}</td>
-                  <td>{d.author?.full_name || '—'}</td>
-                  <td><StatusBadge status={d.status} /></td>
-                  <td className="nowrap">{fmtDate(d.updated_at)}</td>
-                  <td className="num">{num(d.views_count)}</td>
-                  <td className="actions">
-                    {can('documents.manage') && <Link to={`/admin/documents/${d.id}`}>Edit</Link>}
-                    <Link to={`/article/${d.slug}`} target="_blank">View</Link>
-                    {can('documents.publish') && (d.status === 'published'
-                      ? <button className="link-btn" onClick={() => act(d, 'unpublish')}>Unpublish</button>
-                      : <button className="link-btn" onClick={() => act(d, 'publish')}>Publish</button>)}
-                    {can('documents.manage') && <button className="link-btn danger" onClick={() => act(d, 'delete')}>Delete</button>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable cols={cols} rows={list.data?.items || []} empty="No articles match." />
       )}
       <Pagination page={page} pages={list.data?.pages} onPage={(p) => setParams({ status, q, page: p })} />
     </div>

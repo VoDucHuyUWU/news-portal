@@ -4,7 +4,8 @@ import { api } from '../api.js'
 import { useAuth } from '../auth.jsx'
 import { ArticleCard, Empty, ErrorBox, Loading, Pagination, num, useAsync, useDocTitle } from '../ui.jsx'
 
-const FIELDS = ['q', 'category', 'tag', 'date_from', 'date_to', 'sort']
+const FIELDS = ['q', 'category', 'tag', 'date_from', 'date_to', 'sort', 'ranker']
+const RANKERS = { bm25: 'BM25', tfidf: 'TF-IDF', like: 'Phase 1 keyword match (LIKE)' }
 
 export default function Search() {
   const [params, setParams] = useSearchParams()
@@ -15,7 +16,7 @@ export default function Search() {
   useEffect(() => setForm(current), [params.toString()]) // eslint-disable-line react-hooks/exhaustive-deps
   const cats = useAsync(() => api('/api/categories'), [])
   const tags = useAsync(() => api('/api/tags'), [])
-  const hasQuery = FIELDS.some((f) => f !== 'sort' && current[f])
+  const hasQuery = FIELDS.some((f) => f !== 'sort' && f !== 'ranker' && current[f])
   const result = useAsync(() => (hasQuery ? api('/api/search', { params: { ...current, page } }) : Promise.resolve(null)),
     [params.toString()])
   useDocTitle(`${current.q ? `"${current.q}"` : 'Search'} | ${site.site_name}`)
@@ -37,7 +38,7 @@ export default function Search() {
     <div className="container page-pad">
       <div className="section-head">
         <h1>Search</h1>
-        <p className="lede">Keyword search across titles, summaries, article text and tags. Combine it with filters.</p>
+        <p className="lede">Keyword search across titles, summaries, article text and tags, ranked with BM25 over an inverted index. Combine it with filters.</p>
       </div>
       <form className="search-panel" onSubmit={submit} role="search">
         <input className="search-input" type="search" value={form.q} onChange={set('q')} placeholder="Try: sleep, heat pump, inflation" aria-label="Keywords" autoFocus />
@@ -64,6 +65,13 @@ export default function Search() {
               <option value="popular">Most viewed</option>
             </select>
           </label>
+          <label>Ranking
+            <select value={form.ranker || 'bm25'} onChange={set('ranker')}>
+              <option value="bm25">BM25 (Phase 2)</option>
+              <option value="tfidf">TF-IDF (Phase 2)</option>
+              <option value="like">Keyword match (Phase 1)</option>
+            </select>
+          </label>
           <button className="btn">Search</button>
           {hasQuery && <button type="button" className="btn btn-ghost" onClick={() => setParams({})}>Clear</button>}
         </div>
@@ -74,10 +82,11 @@ export default function Search() {
       {result.data && (
         <>
           <p className="result-count">{num(result.data.total)} result{result.data.total === 1 ? '' : 's'}
-            {result.data.query && <> for <strong>“{result.data.query}”</strong></>}</p>
+            {result.data.query && <> for <strong>“{result.data.query}”</strong></>}
+            {RANKERS[result.data.ranker] && <span className="ranker-note"> · ranked by {RANKERS[result.data.ranker]}</span>}</p>
           {result.data.total === 0 && <Empty>No articles match. Try fewer or different words, or remove a filter.</Empty>}
           <div className="card-grid">
-            {result.data.items.map((d, i) => <ArticleCard key={d.id} doc={d} terms={terms} onOpen={() => logClick(d, i)} />)}
+            {result.data.items.map((d, i) => <ArticleCard key={d.id} doc={d} terms={terms} score={result.data.scores?.[d.id]} onOpen={() => logClick(d, i)} />)}
           </div>
           <Pagination page={result.data.page} pages={result.data.pages}
             onPage={(p) => { setParams({ ...Object.fromEntries(params), page: p }); window.scrollTo(0, 0) }} />

@@ -103,7 +103,7 @@ export function Highlight({ text, terms }) {
   return text.split(re).map((part, i) => (i % 2 ? <mark key={i}>{part}</mark> : part))
 }
 
-export function ArticleCard({ doc, terms, onOpen, variant = 'card' }) {
+export function ArticleCard({ doc, terms, onOpen, variant = 'card', score }) {
   const href = `/article/${doc.slug}`
   return (
     <article className={`card card-${variant}`} style={{ '--cat': doc.category?.color || '#141B2D' }}>
@@ -125,6 +125,7 @@ export function ArticleCard({ doc, terms, onOpen, variant = 'card' }) {
           <span>{doc.author?.full_name || 'Staff'}</span>
           <span>{num(doc.views_count)} views</span>
         </div>
+        {score != null && <div className="card-score" title="Relevance score from the ranking algorithm">score {Number(score).toFixed(2)}</div>}
       </div>
     </article>
   )
@@ -185,4 +186,89 @@ export function StatusBadge({ status }) {
 
 export function Empty({ children }) {
   return <div className="empty">{children}</div>
+}
+
+// ---------- Column picker: buttons that show or hide table columns ----------
+// A column is { id, label, cell(row), thClass?, tdClass?, header?, badge?, fixed? }. `badge` is 'PK' or 'FK'. `fixed` columns (e.g. Actions) always stay.
+// The choice is remembered per table in the browser (localStorage), wrapped in try/catch because
+// storage can be unavailable (private mode, blocked cookies).
+
+function readHidden(key) {
+  try {
+    const raw = window.localStorage.getItem(`margin.cols.${key}`)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch { return [] }
+}
+
+export function useColumns(key, columns) {
+  const [hidden, setHidden] = useState(() => readHidden(key))
+  useEffect(() => { setHidden(readHidden(key)) }, [key])
+  const save = (next) => {
+    setHidden(next)
+    try { window.localStorage.setItem(`margin.cols.${key}`, JSON.stringify(next)) } catch { /* not saved, still works */ }
+  }
+  const pickable = columns.filter((c) => !c.fixed)
+  const isOn = (id) => !hidden.includes(id)
+  const shownCount = pickable.filter((c) => isOn(c.id)).length
+  const toggle = (id) => {
+    if (isOn(id)) {
+      if (shownCount <= 1) return // always keep at least one data column
+      save([...hidden, id])
+    } else save(hidden.filter((h) => h !== id))
+  }
+  const only = (id) => save(pickable.filter((c) => c.id !== id).map((c) => c.id))
+  const showAll = () => save([])
+  const visible = columns.filter((c) => c.fixed || isOn(c.id))
+  return { columns, pickable, visible, isOn, toggle, only, showAll, shownCount, allShown: shownCount === pickable.length }
+}
+
+export function ColumnPicker({ cols }) {
+  return (
+    <div className="col-picker" role="group" aria-label="Show or hide columns">
+      <span className="col-picker-label">Columns</span>
+      {cols.pickable.map((c) => {
+        const on = cols.isOn(c.id)
+        return (
+          <button type="button" key={c.id} className={`col-chip${on ? ' is-on' : ''}`} aria-pressed={on}
+            disabled={on && cols.shownCount <= 1}
+            title={on ? `Hide the ${c.label} column (double-click: show only this one)` : `Show the ${c.label} column`}
+            onClick={() => cols.toggle(c.id)} onDoubleClick={() => cols.only(c.id)}>
+            {c.label}{c.badge && <KeyTag kind={c.badge} />}
+          </button>
+        )
+      })}
+      <button type="button" className="link-btn" disabled={cols.allShown} onClick={cols.showAll}>Show all</button>
+      <span className="muted small" aria-live="polite">{cols.shownCount} of {cols.pickable.length} shown</span>
+    </div>
+  )
+}
+
+export function DataTable({ cols, rows, rowKey = (r) => r.id, rowClass, empty, className = '' }) {
+  const shown = cols.visible
+  return (
+    <div className="table-wrap">
+      <table className={`table ${className}`}>
+        <thead><tr>{shown.map((c) => <th key={c.id} className={c.thClass || ''}>{c.header ?? c.label}</th>)}</tr></thead>
+        <tbody>
+          {rows.length === 0 && empty && <tr><td colSpan={shown.length} className="muted">{empty}</td></tr>}
+          {rows.map((r) => (
+            <tr key={rowKey(r)} className={rowClass ? rowClass(r) : ''}>
+              {shown.map((c) => <td key={c.id} className={c.tdClass || ''}>{c.cell(r)}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// Small PK / FK marker used in table headers and on the column buttons.
+export function KeyTag({ kind, title }) {
+  return <span className={`key-tag key-${kind.toLowerCase()}`} title={title || (kind === 'PK' ? 'Primary key' : 'Foreign key')}>{kind}</span>
+}
+
+// Header for a column that mirrors a real database column: name, key marker, and where a foreign key points.
+export function ColHead({ name, pk, fk }) {
+  return <>{name}{pk && <KeyTag kind="PK" />}{fk && <KeyTag kind="FK" title={`Foreign key to ${fk}`} />}{fk && <div className="col-ref">→ {fk}</div>}</>
 }

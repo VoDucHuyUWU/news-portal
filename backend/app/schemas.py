@@ -226,6 +226,8 @@ class SearchResponse(BaseModel):
     page: int
     page_size: int
     pages: int
+    ranker: str = "like"                 # bm25 | tfidf | like | none (filters only)
+    scores: dict[int, float] = {}        # document id -> relevance score (empty for the LIKE ranker)
 
 
 class ClickIn(BaseModel):

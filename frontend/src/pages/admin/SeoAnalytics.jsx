@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../api.js'
-import { ErrorBox, Field, Loading, Modal, Pagination, StatusBadge, num, useAsync, useDocTitle } from '../../ui.jsx'
+import { ColHead, ColumnPicker, DataTable, ErrorBox, Field, Loading, Modal, Pagination, StatusBadge, num, useAsync, useColumns, useDocTitle } from '../../ui.jsx'
 
 function Meter({ value }) {
   const tone = value === 100 ? 'good' : value >= 50 ? 'mid' : 'low'
@@ -29,6 +29,14 @@ export function Seo() {
     } catch (err) { setError(err) }
   }
   const len = editing?.meta_description.length || 0
+  const cols = useColumns('seo', [
+    { id: 'id', label: 'document_id', badge: 'PK', header: <ColHead name="document_id" pk fk="documents.id" />, tdClass: 'small', cell: (i) => i.id },
+    { id: 'article', label: 'Article', cell: (i) => <><strong>{i.title}</strong><div className="muted small">{i.seo?.meta_description || 'No description'}</div></> },
+    { id: 'status', label: 'Status', cell: (i) => <StatusBadge status={i.status} /> },
+    { id: 'completeness', label: 'Completeness', tdClass: 'nowrap', cell: (i) => <><Meter value={i.completeness} /> {i.completeness}%</> },
+    { id: 'missing', label: 'Missing', tdClass: 'small', cell: (i) => i.missing.join(', ') || '—' },
+    { id: 'actions', label: 'Actions', header: '', fixed: true, cell: (i) => <button className="btn btn-small btn-ghost" onClick={() => open(i)}>Edit</button> },
+  ])
   return (
     <div>
       <div className="admin-head"><h1>SEO metadata</h1><p className="muted">Titles, descriptions, keywords and image alt text used by search engines, link previews and screen readers.</p></div>
@@ -36,22 +44,10 @@ export function Seo() {
         <input type="search" placeholder="Filter by title" value={q} onChange={(e) => { setQ(e.target.value); setPage(1) }} />
         <label className="check"><input type="checkbox" checked={missingOnly} onChange={(e) => { setMissingOnly(e.target.checked); setPage(1) }} /> Only articles with missing fields</label>
       </div>
+      <ColumnPicker cols={cols} />
       <ErrorBox error={list.error} />
       {list.loading && !list.data ? <Loading /> : (
-        <div className="table-wrap"><table className="table">
-          <thead><tr><th>Article</th><th>Status</th><th>Completeness</th><th>Missing</th><th></th></tr></thead>
-          <tbody>
-            {(list.data?.items || []).map((i) => (
-              <tr key={i.id}>
-                <td><strong>{i.title}</strong><div className="muted small">{i.seo?.meta_description || 'No description'}</div></td>
-                <td><StatusBadge status={i.status} /></td>
-                <td className="nowrap"><Meter value={i.completeness} /> {i.completeness}%</td>
-                <td className="small">{i.missing.join(', ') || '—'}</td>
-                <td><button className="btn btn-small btn-ghost" onClick={() => open(i)}>Edit</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table></div>
+        <DataTable cols={cols} rows={list.data?.items || []} empty="No articles match." />
       )}
       <Pagination page={page} pages={list.data?.pages} onPage={setPage} />
       {editing && (

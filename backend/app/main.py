@@ -11,7 +11,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import SessionLocal, init_db
-from app.routers import admin_content, admin_moderation, admin_seo, admin_system, auth, public, search, users
+from app.routers import (admin_content, admin_database, admin_moderation, admin_seo, admin_system, auth, public, search,
+                         users)
 
 
 # Windows can map .svg/.js to the wrong type via the registry; browsers then refuse to show the file.
@@ -36,7 +37,7 @@ app = FastAPI(title="Margin News Portal API", version="1.0.0", lifespan=lifespan
 app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins), allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 for r in (auth.router, users.router, public.router, search.router, admin_system.router, admin_content.router,
-          admin_moderation.router, admin_seo.router):
+          admin_moderation.router, admin_seo.router, admin_database.router):
     app.include_router(r)
 
 settings.media_dir.mkdir(parents=True, exist_ok=True)

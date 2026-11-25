@@ -5,7 +5,7 @@ import { Avatar, ErrorBox, Loading, fmtDateTime, num, useAsync, useDocTitle } fr
 import { DocumentEditor, Documents, Taxonomy } from './Content.jsx'
 import { Comments, Reports, SpamRules } from './Moderation.jsx'
 import { Analytics, Seo } from './SeoAnalytics.jsx'
-import { Logs, Roles, SettingsPage, Users } from './System.jsx'
+import { Database, Logs, Roles, SettingsPage, Users } from './System.jsx'
 
 // Menu groups mirror the four staff roles; each item appears only if the user holds the permission.
 export const MENU = [
@@ -26,6 +26,7 @@ export const MENU = [
     { to: '/admin/users', label: 'Users', perms: ['users.manage'] },
     { to: '/admin/roles', label: 'Roles & permissions', perms: ['roles.manage'] },
     { to: '/admin/logs', label: 'System logs', perms: ['logs.view'] },
+    { to: '/admin/database', label: 'Database', perms: ['logs.view'] },
     { to: '/admin/settings', label: 'Global settings', perms: ['settings.manage'] },
   ] },
 ]
@@ -130,6 +131,7 @@ export default function AdminApp() {
           <Route path="users" element={g(['users.manage'], <Users />)} />
           <Route path="roles" element={g(['roles.manage'], <Roles />)} />
           <Route path="logs" element={g(['logs.view'], <Logs />)} />
+          <Route path="database" element={g(['logs.view'], <Database />)} />
           <Route path="settings" element={g(['settings.manage'], <SettingsPage />)} />
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </Routes>
